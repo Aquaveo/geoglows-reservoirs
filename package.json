@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "maplibre-gl": "^6.0.0"
+    "maplibre-gl": "^6.0.0",
+    "numcodecs": "^0.3.2",
+    "riverforecastsystem": "file:../npmjs-riverforecastsystem"
   },
   "devDependencies": {
     "vite": "^8.0.0"

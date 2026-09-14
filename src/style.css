@@ -32,3 +32,24 @@ html, body {
   right: 0;
   bottom: 0;
 }
+
+#panel {
+  position: absolute;
+  top: calc(var(--header-h) + 12px);
+  right: 12px;
+  width: 320px;
+  max-height: calc(100% - var(--header-h) - 24px);
+  overflow: auto;
+  padding: 14px 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+#panel h2 { margin: 0 0 4px; font-size: 1rem; color: var(--brand); }
+#panel .muted { margin: 0 0 10px; color: #5a6b7b; font-size: 0.78rem; }
+#panel dt { font-weight: 600; margin-top: 8px; }
+#panel dd { margin: 2px 0 0; color: #2a3947; }
+#panel .error { color: #b00020; }
