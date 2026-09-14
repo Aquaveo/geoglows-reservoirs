@@ -1,0 +1,34 @@
+:root {
+  --header-h: 56px;
+  --brand: #1d6fb8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1a2732;
+}
+
+.app-header {
+  height: var(--header-h);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--brand);
+  color: #fff;
+}
+
+.app-header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+.app-subtitle { font-size: 0.8rem; opacity: 0.85; }
+
+#map {
+  position: absolute;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
