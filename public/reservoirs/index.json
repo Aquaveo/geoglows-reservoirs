@@ -3,45 +3,30 @@
     "id": "tavera",
     "name": "Tavera",
     "lat": 19.27379,
-    "lon": -70.701,
-    "min_level": 300.0,
-    "max_level": 327.5,
-    "river_ids": [780055166, 780015230]
+    "lon": -70.701
   },
   {
     "id": "hatillo",
     "name": "Hatillo",
     "lat": 19.0034,
-    "lon": -70.2249,
-    "min_level": 70.0,
-    "max_level": 86.5,
-    "river_ids": [780061320, 780034439, 780021382, 780021766, 780022150, 780022534]
+    "lon": -70.2249
   },
   {
     "id": "jiguey",
     "name": "Jiguey",
     "lat": 18.5596,
-    "lon": -70.3793,
-    "min_level": 500.0,
-    "max_level": 541.5,
-    "river_ids": [780049809, 780020628, 780019860, 780062483]
+    "lon": -70.3793
   },
   {
     "id": "valdesia",
     "name": "Valdesia",
     "lat": 18.4084,
-    "lon": -70.2566,
-    "min_level": 130.75,
-    "max_level": 150.0,
-    "river_ids": [780044440, 780039447, 780097431, 780056729]
+    "lon": -70.2566
   },
   {
     "id": "sabaneta",
     "name": "Sabaneta",
     "lat": 19.0005,
-    "lon": -71.2922,
-    "min_level": 612.0,
-    "max_level": 644.0,
-    "river_ids": [780044805, 780041349]
+    "lon": -71.2922
   }
 ]

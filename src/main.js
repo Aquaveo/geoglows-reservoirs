@@ -34,7 +34,7 @@ async function addReservoirMarkers() {
   const bounds = new maplibregl.LngLatBounds();
   for (const r of reservoirs) {
     const popup = new maplibregl.Popup({ offset: 24 }).setHTML(
-      `<strong>${r.name}</strong><br/>Operating band: ${r.min_level}–${r.max_level} m`
+      `<strong>${r.name}</strong>`
     );
     new maplibregl.Marker({ color: '#1d6fb8' })
       .setLngLat([r.lon, r.lat])

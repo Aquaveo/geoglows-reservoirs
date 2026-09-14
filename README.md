@@ -26,8 +26,8 @@ npm run preview
 ```
 
 ## Reservoir config
-- `public/reservoirs/index.json` — reservoir list (id, name, lat/lon, operating band, GEOGLOWS river_ids).
-- `public/reservoirs/<id>.json` — per-reservoir bundle (bathymetry curve, operation rule, observed levels, observed inflow reference, anchor). *Added in Phase 2.*
+- `public/reservoirs/index.json` — lean map list (id, name, lat/lon) used to place markers.
+- `public/reservoirs/<id>.json` — per-reservoir bundle: operating band (`min_level`/`max_level`), `river_ids`, operation `rule`, `bathymetry` (elevation↔volume curve), and the full observed `levels` + `inflow` series. These are the offline model inputs the browser can't fetch from GEOGLOWS.
 
 ## Deploy
 Pushing to `main` builds and publishes to GitHub Pages via
