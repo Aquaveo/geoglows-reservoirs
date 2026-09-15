@@ -1,5 +1,5 @@
-// Port of geoglows.bias.correct_historical (geoglows 2.2.0): monthly
-// Sturges-histogram quantile mapping of simulated flow onto observed flow.
+// Port of geoglows.bias correct_historical + correct_forecast (geoglows 2.2.0):
+// monthly Sturges-histogram quantile mapping of simulated flow onto observed flow.
 
 // scipy.interpolate.interp1d(kind='linear'): searchsorted-left, index clipped
 // to [1, n-1], then linear between neighbors (so out-of-domain extrapolates).
@@ -72,6 +72,21 @@ export function correctHistorical(sim, obs) {
   }
   out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return { dates: out.map((r) => r[0]), values: out.map((r) => r[1]) };
+}
+
+/**
+ * Correct a short-term forecast series against sim/obs using a single month's
+ * mapping (the month of forecast.dates[useMonth]; useMonth 0=first, -1=last).
+ * forecast/sim/obs: { dates, values }. Returns { dates, values } clipped >= 0.
+ */
+export function correctForecast(forecast, sim, obs, useMonth = 0) {
+  const idx = useMonth < 0 ? forecast.dates.length + useMonth : useMonth;
+  const month = monthOf(forecast.dates[idx]);
+  const toProb = flowProbabilityMapper(filterMonth(sim, month).values, 'prob');
+  const toFlow = flowProbabilityMapper(filterMonth(obs, month).values, 'flow');
+  const values = forecast.values.map((v) =>
+    v == null || Number.isNaN(v) ? v : Math.max(0, toFlow(toProb(v))));
+  return { dates: forecast.dates, values };
 }
 
 function filterMonth({ dates, values }, month) {
