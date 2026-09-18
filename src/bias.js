@@ -10,8 +10,8 @@ function interp1d(xs, ys) {
     while (lo < hi) { const m = (lo + hi) >> 1; if (xs[m] < q) lo = m + 1; else hi = m; }
     let i = Math.min(Math.max(lo, 1), n - 1);
     const x0 = xs[i - 1], x1 = xs[i];
-    const slope = (ys[i] - ys[i - 1]) / (x1 - x0);
-    return slope * (q - x0) + ys[i - 1];
+    if (x1 === x0) return ys[i - 1]; // flat-CDF segment: avoid Inf*0=NaN (rare historical zero-flow days may differ from the Python reference; unused by reconstruction)
+    return (ys[i] - ys[i - 1]) / (x1 - x0) * (q - x0) + ys[i - 1];
   };
 }
 

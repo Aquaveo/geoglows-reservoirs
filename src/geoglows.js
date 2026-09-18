@@ -67,6 +67,29 @@ export async function retroDaily(riverIds) {
 }
 
 /**
+ * Daily forecast-records inflow (m^3/s) bridging the retro lag to ~today, summed
+ * across reaches. Uses the recent forecast window. Returns { dates, values }.
+ */
+export async function forecastRecordsDaily(riverIds) {
+  const dates = await v2.dates();
+  const startDate = dates[Math.max(0, dates.length - 14)];
+  const endDate = dates.at(-1);
+  const perReach = await Promise.all(
+    riverIds.map((riverId) =>
+      v2.forecastRecords({ baseUrl: V2_BASES.forecast, riverId, startDate, endDate })),
+  );
+  const summed = sumByTimestamp(
+    perReach.map((r) => ({ time: r.time, values: r.flow_median.map((q) => (q < 0 ? 0 : q)) })),
+  );
+  // Cap at the last init date: the final forecast's full horizon would otherwise
+  // leak future days into a "records-to-today" series.
+  const cutoff = `${endDate.slice(0, 4)}-${endDate.slice(4, 6)}-${endDate.slice(6, 8)}`;
+  const daily = resampleDailyMean(summed);
+  const keep = daily.dates.map((d, i) => [d, daily.values[i]]).filter(([d]) => d <= cutoff);
+  return { dates: keep.map((r) => r[0]), values: keep.map((r) => r[1]) };
+}
+
+/**
  * Latest 51-member ensemble forecast inflow (m^3/s), summed across the reservoir's
  * reaches and resampled to daily means. Returns
  * { date, dates: 'YYYY-MM-DD'[], members: number[][], mean: number[] }
