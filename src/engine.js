@@ -64,3 +64,71 @@ export function reconstruct(bundle, qin) {
     dates, levels, qin: qins, qout: qouts,
   };
 }
+
+// numpy linear percentile over an ascending-sorted array.
+function percentile(sortedAsc, p) {
+  const n = sortedAsc.length;
+  if (n === 1) return sortedAsc[0];
+  const rank = (p / 100) * (n - 1);
+  const lo = Math.floor(rank), hi = Math.ceil(rank);
+  return lo === hi ? sortedAsc[lo] : sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (rank - lo);
+}
+
+// Propagate every ensemble member from the anchor with one shared outflow schedule
+// (from the ensemble-mean run unless qoutOverride is given). ensMatrix: days x members.
+// Returns { traj (days x members of levels), qoutSeq }.
+export function propagateBand(bundle, anchorLevel, ensMatrix, qoutOverride) {
+  const bathy = bundle.bathymetry;
+  const vmin = Math.min(...bathy.vol), vmax = Math.max(...bathy.vol);
+  const v0 = levelToVolume(anchorLevel, bathy);
+  const ndays = ensMatrix.length, nmem = ensMatrix[0].length;
+
+  // Fill NaN members with that day's cross-member mean.
+  const filled = ensMatrix.map((row) => {
+    const valid = row.filter((v) => v != null && !Number.isNaN(v));
+    const mean = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
+    return row.map((v) => (v == null || Number.isNaN(v) ? mean : v));
+  });
+
+  let qoutSeq;
+  if (qoutOverride) {
+    qoutSeq = Array.from({ length: ndays }, (_, t) =>
+      qoutOverride[Math.min(t, qoutOverride.length - 1)] ?? 0);
+  } else {
+    qoutSeq = [];
+    let v = v0, wsePrev = anchorLevel;
+    for (let t = 0; t < ndays; t++) {
+      const dayMean = filled[t].reduce((a, b) => a + b, 0) / nmem;
+      const qo = ruleQout(wsePrev, bundle.rule);
+      qoutSeq.push(qo);
+      v = Math.min(Math.max(v + (dayMean - qo) * 86400, vmin), vmax);
+      wsePrev = volumeToLevel(v, bathy);
+    }
+  }
+
+  const traj = Array.from({ length: ndays }, () => new Array(nmem));
+  for (let m = 0; m < nmem; m++) {
+    let v = v0;
+    for (let t = 0; t < ndays; t++) {
+      v = Math.min(Math.max(v + (filled[t][m] - qoutSeq[t]) * 86400, vmin), vmax);
+      traj[t][m] = volumeToLevel(v, bathy);
+    }
+  }
+  return { traj, qoutSeq };
+}
+
+// Reduce a days x members level matrix to per-day percentile bands.
+export function bandStats(dates, traj, qoutSeq) {
+  const perDay = (fn) => traj.map((row) => fn([...row].sort((a, b) => a - b), row));
+  return {
+    dates,
+    min: perDay((s) => s[0]),
+    p25: perDay((s) => percentile(s, 25)),
+    median: perDay((s) => percentile(s, 50)),
+    p75: perDay((s) => percentile(s, 75)),
+    max: perDay((s) => s[s.length - 1]),
+    mean: perDay((_, row) => row.reduce((a, b) => a + b, 0) / row.length),
+    members: traj[0].map((_, m) => traj.map((row) => row[m])),
+    qout: qoutSeq,
+  };
+}

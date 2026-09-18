@@ -1,8 +1,9 @@
 // engine.qin_to_today: retro -> correctHistorical, bridged to today with corrected
 // forecast records (retro-only fallback).
 
-import { retroDaily, forecastRecordsDaily } from './geoglows.js';
+import { retroDaily, forecastRecordsDaily, latestForecastEnsembleDaily } from './geoglows.js';
 import { correctHistorical, correctForecast } from './bias.js';
+import { propagateBand, bandStats } from './engine.js';
 
 // retroC plus frC entries strictly after retroC's last date; sorted, dedup keep-last.
 function stitch(retroC, frC) {
@@ -28,4 +29,19 @@ export async function qinToToday(bundle) {
   } catch {
     return retroC;
   }
+}
+
+// Ensemble forecast band from the anchor: correct the ensemble mean, scale every
+// member by the per-day factor, then propagate. Returns bandStats { dates, min, ... }.
+export async function forecastBand(bundle, anchorLevel) {
+  const rids = bundle.river_ids;
+  const obs = { dates: bundle.observed_inflow.dates, values: bundle.observed_inflow.qin };
+  const [retro, fc] = await Promise.all([retroDaily(rids), latestForecastEnsembleDaily(rids)]);
+  const sim = { dates: retro.dates, values: retro.q };
+  const meanCor = correctForecast({ dates: fc.dates, values: fc.mean }, sim, obs);
+  const factor = fc.dates.map((_, d) =>
+    fc.mean[d] > 0 ? Math.min(5, Math.max(0.2, meanCor.values[d] / fc.mean[d])) : 1);
+  const ensMatrix = fc.dates.map((_, d) => fc.members.map((mem) => mem[d] * factor[d]));
+  const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix);
+  return bandStats(fc.dates, traj, qoutSeq);
 }
