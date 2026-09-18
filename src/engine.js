@@ -1,6 +1,5 @@
-// Port of engine.reconstruct + model.rule_qout: daily reservoir water balance
+// Daily reservoir water balance (engine.reconstruct + model.rule_qout):
 //   V(t) = clip(V(t-1) + (Qin - Qout)*86400, vmin, vmax),  Qout = rule(level)
-// Level<->volume via the bundle bathymetry curve.
 
 // np.interp: clamp at the ends, linear between; xs ascending.
 function interp(x, xs, ys) {
@@ -32,11 +31,8 @@ function lastObserved({ dates, levels }) {
   throw new Error('no observed level in bundle');
 }
 
-/**
- * Carry the reservoir level from the last observed datum forward using
- * bias-corrected daily inflow. qin: { dates: 'YYYY-MM-DD'[], values: number[] }.
- * Returns { anchorDate, anchorLevel, dates, levels, qin, qout }.
- */
+// Carry the level from the last observed datum forward on bias-corrected inflow.
+// qin: { dates, values } -> { anchorDate, anchorLevel, dates, levels, qin, qout }.
 export function reconstruct(bundle, qin) {
   const { date: startDate, level: startLevel } = lastObserved(bundle.observed_levels);
   const bathy = bundle.bathymetry;

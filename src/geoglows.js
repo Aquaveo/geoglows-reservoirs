@@ -1,12 +1,5 @@
-// GEOGLOWS v2 streamflow fetch layer.
-//
-// Reads river discharge (m^3/s) for a reservoir's feeder reaches from the
-// GEOGLOWS v2 Zarr archives on S3 via the `riverforecastsystem` client, and
-// returns inflow series summed across those reaches — the raw (bias-uncorrected)
-// input the client-side reservoir model consumes.
-//
-// S3 REST endpoints: HTTPS (no mixed content) and answer CORS preflight. The
-// package default s3-website URLs are HTTP; the CloudFront ones 403 the preflight.
+// GEOGLOWS v2 streamflow fetch: per-reach discharge (m^3/s) from S3 Zarr, summed.
+// S3 REST bases only — HTTPS + CORS preflight (CloudFront 403s the preflight).
 
 import { v2 } from 'riverforecastsystem';
 
@@ -15,13 +8,11 @@ export const V2_BASES = {
   retro: 'https://geoglows-v2.s3.us-west-2.amazonaws.com',              // retrospective + metadata
 };
 
-const MS_PER_DAY = 86_400_000;
-const dayKey = (date) => new Date(date).toISOString().slice(0, 10); // 'YYYY-MM-DD' (UTC)
+const dayKey = (date) => new Date(date).toISOString().slice(0, 10);
 
-// Align several {time, value} series on their shared timestamps and sum them.
-// Reaches share the GEOGLOWS timestep grid, so a plain per-timestamp sum is exact.
+// Sum several {time, values} series on their shared timestamps.
 function sumByTimestamp(series) {
-  const acc = new Map(); // epoch-ms -> summed value
+  const acc = new Map();
   for (const { time, values } of series) {
     for (let i = 0; i < time.length; i++) {
       const v = values[i];
@@ -34,9 +25,9 @@ function sumByTimestamp(series) {
   return { time: times.map((t) => new Date(t)), values: times.map((t) => acc.get(t)) };
 }
 
-// Mean-aggregate a sub-daily {time, values} series to one value per calendar day.
+// Mean-aggregate a sub-daily {time, values} series to daily.
 function resampleDailyMean({ time, values }) {
-  const sums = new Map();  // 'YYYY-MM-DD' -> {sum, n}
+  const sums = new Map();
   for (let i = 0; i < time.length; i++) {
     const v = values[i];
     if (v == null || Number.isNaN(v)) continue;
@@ -49,10 +40,7 @@ function resampleDailyMean({ time, values }) {
   return { dates, values: dates.map((d) => sums.get(d).sum / sums.get(d).n) };
 }
 
-/**
- * Bias-uncorrected daily retrospective inflow (m^3/s), summed across a
- * reservoir's feeder reaches. Returns { dates: 'YYYY-MM-DD'[], q: number[] }.
- */
+// Bias-uncorrected daily retrospective inflow, summed over reaches -> { dates, q }.
 export async function retroDaily(riverIds) {
   const perReach = await Promise.all(
     riverIds.map(async (riverId) => {
@@ -66,10 +54,7 @@ export async function retroDaily(riverIds) {
   return { dates: summed.time.map(dayKey), q: summed.values };
 }
 
-/**
- * Daily forecast-records inflow (m^3/s) bridging the retro lag to ~today, summed
- * across reaches. Uses the recent forecast window. Returns { dates, values }.
- */
+// Daily forecast-records inflow bridging the retro lag to ~today -> { dates, values }.
 export async function forecastRecordsDaily(riverIds) {
   const dates = await v2.dates();
   const startDate = dates[Math.max(0, dates.length - 14)];
@@ -81,26 +66,20 @@ export async function forecastRecordsDaily(riverIds) {
   const summed = sumByTimestamp(
     perReach.map((r) => ({ time: r.time, values: r.flow_median.map((q) => (q < 0 ? 0 : q)) })),
   );
-  // Cap at the last init date: the final forecast's full horizon would otherwise
-  // leak future days into a "records-to-today" series.
+  // Cap at the last init date so the final forecast's future horizon doesn't leak in.
   const cutoff = `${endDate.slice(0, 4)}-${endDate.slice(4, 6)}-${endDate.slice(6, 8)}`;
   const daily = resampleDailyMean(summed);
   const keep = daily.dates.map((d, i) => [d, daily.values[i]]).filter(([d]) => d <= cutoff);
   return { dates: keep.map((r) => r[0]), values: keep.map((r) => r[1]) };
 }
 
-/**
- * Latest 51-member ensemble forecast inflow (m^3/s), summed across the reservoir's
- * reaches and resampled to daily means. Returns
- * { date, dates: 'YYYY-MM-DD'[], members: number[][], mean: number[] }
- * where members[m][d] is member m's daily-mean inflow on day d.
- */
+// Latest 51-member ensemble inflow, summed over reaches, daily.
+// -> { date, dates, members: number[][], mean: number[] } (members[m][d]).
 export async function latestForecastEnsembleDaily(riverIds) {
   const dates = await v2.dates();
-  const date = dates.at(-1); // most recent initialization (YYYYMMDD)
+  const date = dates.at(-1); // most recent init (YYYYMMDD)
 
-  // forecast() returns discharge as [member][timestep] for one reach; sum reaches
-  // per (member, timestep), then resample each member to daily means.
+  // Sum reaches per (member, timestep), then resample each member to daily.
   const perReach = await Promise.all(
     riverIds.map((riverId) => v2.forecast({ baseUrl: V2_BASES.forecast, date, riverId })),
   );
@@ -129,5 +108,3 @@ export async function latestForecastEnsembleDaily(riverIds) {
 
   return { date, dates: dailyDates, members, mean };
 }
-
-export { MS_PER_DAY };

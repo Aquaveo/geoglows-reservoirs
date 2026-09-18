@@ -1,6 +1,5 @@
-// Assemble bias-corrected daily inflow from history to ~today (engine.qin_to_today):
-// live retro -> correctHistorical, then bridge the retro lag with corrected
-// forecast records. Falls back to retro-only if records are unavailable.
+// engine.qin_to_today: retro -> correctHistorical, bridged to today with corrected
+// forecast records (retro-only fallback).
 
 import { retroDaily, forecastRecordsDaily } from './geoglows.js';
 import { correctHistorical, correctForecast } from './bias.js';
@@ -15,10 +14,7 @@ function stitch(retroC, frC) {
   return { dates, values: dates.map((d) => map.get(d)) };
 }
 
-/**
- * Bias-corrected daily inflow (m^3/s) for a reservoir, history -> ~today.
- * Returns { dates: 'YYYY-MM-DD'[], values: number[] }.
- */
+// Bias-corrected daily inflow, history -> today. -> { dates, values }.
 export async function qinToToday(bundle) {
   const rids = bundle.river_ids;
   const obs = { dates: bundle.observed_inflow.dates, values: bundle.observed_inflow.qin };

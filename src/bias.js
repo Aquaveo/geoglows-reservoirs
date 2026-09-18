@@ -1,8 +1,7 @@
 // Port of geoglows.bias correct_historical + correct_forecast (geoglows 2.2.0):
 // monthly Sturges-histogram quantile mapping of simulated flow onto observed flow.
 
-// scipy.interpolate.interp1d(kind='linear'): searchsorted-left, index clipped
-// to [1, n-1], then linear between neighbors (so out-of-domain extrapolates).
+// scipy interp1d(kind='linear'): searchsorted-left, clamp index, linear (extrapolates).
 function interp1d(xs, ys) {
   const n = xs.length;
   return (q) => {
@@ -10,7 +9,7 @@ function interp1d(xs, ys) {
     while (lo < hi) { const m = (lo + hi) >> 1; if (xs[m] < q) lo = m + 1; else hi = m; }
     let i = Math.min(Math.max(lo, 1), n - 1);
     const x0 = xs[i - 1], x1 = xs[i];
-    if (x1 === x0) return ys[i - 1]; // flat-CDF segment: avoid Inf*0=NaN (rare historical zero-flow days may differ from the Python reference; unused by reconstruction)
+    if (x1 === x0) return ys[i - 1]; // flat-CDF segment: avoid Inf*0=NaN
     return (ys[i] - ys[i - 1]) / (x1 - x0) * (q - x0) + ys[i - 1];
   };
 }
@@ -53,11 +52,7 @@ function flowProbabilityMapper(data, mode) {
 
 const monthOf = (isoDate) => Number(isoDate.slice(5, 7));
 
-/**
- * Monthly quantile-map simulated flow onto observed flow.
- * sim/obs: { dates: 'YYYY-MM-DD'[], values: number[] }.
- * Returns { dates, values } for sim's dates, corrected and clipped >= 0, sorted.
- */
+// Monthly quantile-map sim flow onto obs flow. sim/obs: { dates, values } -> { dates, values }.
 export function correctHistorical(sim, obs) {
   const months = [...new Set(sim.dates.map(monthOf))].sort((a, b) => a - b);
   const out = [];
@@ -74,11 +69,7 @@ export function correctHistorical(sim, obs) {
   return { dates: out.map((r) => r[0]), values: out.map((r) => r[1]) };
 }
 
-/**
- * Correct a short-term forecast series against sim/obs using a single month's
- * mapping (the month of forecast.dates[useMonth]; useMonth 0=first, -1=last).
- * forecast/sim/obs: { dates, values }. Returns { dates, values } clipped >= 0.
- */
+// Correct a forecast series using one month's sim/obs mapping (month of forecast.dates[useMonth]).
 export function correctForecast(forecast, sim, obs, useMonth = 0) {
   const idx = useMonth < 0 ? forecast.dates.length + useMonth : useMonth;
   const month = monthOf(forecast.dates[idx]);

@@ -40,8 +40,7 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-// Side panel: for now a status readout proving GEOGLOWS v2 data reaches the
-// browser. The reconstruction/forecast charts replace this in a later phase.
+// Side panel: status readout (charts replace this later).
 const panel = document.getElementById('panel');
 const fmt = (n) => Number(n).toFixed(2);
 
