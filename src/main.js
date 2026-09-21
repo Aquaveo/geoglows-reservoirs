@@ -1,7 +1,10 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
-import { retroDaily, latestForecastEnsembleDaily } from './geoglows.js';
+import { qinToToday, forecastBand } from './pipeline.js';
+import { retroDaily } from './geoglows.js';
+import { reconstruct } from './engine.js';
+import { renderHistoryChart, renderForecastChart } from './chart.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -40,41 +43,41 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-// Side panel: status readout (charts replace this later).
 const panel = document.getElementById('panel');
-const fmt = (n) => Number(n).toFixed(2);
+
+// Fetch retro once, run qin -> reconstruct -> band, memoized per reservoir.
+const resultCache = new Map();
+function computeReservoir(bundle) {
+  if (!resultCache.has(bundle.id)) {
+    resultCache.set(bundle.id, (async () => {
+      const retro = await retroDaily(bundle.river_ids);
+      const qin = await qinToToday(bundle, retro);
+      const reconstruction = reconstruct(bundle, qin);
+      const band = await forecastBand(bundle, reconstruction.anchorLevel, retro);
+      return { reconstruction, band };
+    })());
+  }
+  return resultCache.get(bundle.id);
+}
 
 async function showReservoir(r) {
   panel.hidden = false;
-  panel.innerHTML = `<h2>${r.name}</h2><p class="muted">Fetching GEOGLOWS v2 inflow…</p>`;
+  panel.innerHTML = `<h2>${r.name}</h2><p class="muted">Computing level from GEOGLOWS v2…</p>`;
   try {
     const bundle = await loadBundle(r.id);
-    const rids = bundle.river_ids;
-    const [retro, fc] = await Promise.all([
-      retroDaily(rids),
-      latestForecastEnsembleDaily(rids),
-    ]);
-    const spread0 = [
-      Math.min(...fc.members.map((m) => m[0])),
-      Math.max(...fc.members.map((m) => m[0])),
-    ];
+    const { reconstruction, band } = await computeReservoir(bundle);
     panel.innerHTML = `
       <h2>${r.name}</h2>
-      <p class="muted">Operating band ${bundle.min_level}–${bundle.max_level} m ·
-        ${rids.length} feeder reach${rids.length > 1 ? 'es' : ''}</p>
-      <dl>
-        <dt>Retrospective inflow</dt>
-        <dd>${retro.dates.length.toLocaleString()} daily pts,
-          ${retro.dates[0]} → ${retro.dates.at(-1)}<br>
-          latest ${fmt(retro.q.at(-1))} m³/s</dd>
-        <dt>Forecast ensemble (init ${fc.date})</dt>
-        <dd>${fc.members.length} members × ${fc.dates.length} days<br>
-          mean today ${fmt(fc.mean[0])} m³/s · day-${fc.dates.length}
-          ${fmt(fc.mean.at(-1))} m³/s<br>
-          day-0 spread ${fmt(spread0[0])}–${fmt(spread0[1])} m³/s</dd>
-      </dl>`;
+      <p class="muted">Today ~${reconstruction.anchorLevel.toFixed(2)} m ·
+        band ${bundle.min_level}–${bundle.max_level} m · scroll to zoom</p>
+      <h3>History</h3>
+      <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
+      <h3>15-day forecast</h3>
+      <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>`;
+    renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
+    renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band });
   } catch (err) {
-    panel.innerHTML = `<h2>${r.name}</h2><p class="error">Fetch failed: ${err.message}</p>`;
+    panel.innerHTML = `<h2>${r.name}</h2><p class="error">Failed: ${err.message}</p>`;
   }
 }
 

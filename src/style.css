@@ -37,7 +37,8 @@ html, body {
   position: absolute;
   top: calc(var(--header-h) + 12px);
   right: 12px;
-  width: 320px;
+  width: 480px;
+  max-width: calc(100% - 24px);
   max-height: calc(100% - var(--header-h) - 24px);
   overflow: auto;
   padding: 14px 16px;
@@ -49,7 +50,7 @@ html, body {
 }
 
 #panel h2 { margin: 0 0 4px; font-size: 1rem; color: var(--brand); }
+#panel h3 { margin: 14px 0 4px; font-size: 0.82rem; color: #2a3947; }
 #panel .muted { margin: 0 0 10px; color: #5a6b7b; font-size: 0.78rem; }
-#panel dt { font-weight: 600; margin-top: 8px; }
-#panel dd { margin: 2px 0 0; color: #2a3947; }
 #panel .error { color: #b00020; }
+.chart-wrap { position: relative; height: 240px; }

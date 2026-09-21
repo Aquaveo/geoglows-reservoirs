@@ -16,10 +16,11 @@ function stitch(retroC, frC) {
 }
 
 // Bias-corrected daily inflow, history -> today. -> { dates, values }.
-export async function qinToToday(bundle) {
+// Pass a pre-fetched retro to avoid re-downloading it.
+export async function qinToToday(bundle, retro) {
   const rids = bundle.river_ids;
   const obs = { dates: bundle.observed_inflow.dates, values: bundle.observed_inflow.qin };
-  const retro = await retroDaily(rids);
+  retro = retro ?? await retroDaily(rids);
   const sim = { dates: retro.dates, values: retro.q };
   const retroC = correctHistorical(sim, obs);
   try {
@@ -33,11 +34,12 @@ export async function qinToToday(bundle) {
 
 // Ensemble forecast band from the anchor: correct the ensemble mean, scale every
 // member by the per-day factor, then propagate. Returns bandStats { dates, min, ... }.
-export async function forecastBand(bundle, anchorLevel) {
+// Pass a pre-fetched retro to avoid re-downloading it.
+export async function forecastBand(bundle, anchorLevel, retro) {
   const rids = bundle.river_ids;
   const obs = { dates: bundle.observed_inflow.dates, values: bundle.observed_inflow.qin };
-  const [retro, fc] = await Promise.all([retroDaily(rids), latestForecastEnsembleDaily(rids)]);
-  const sim = { dates: retro.dates, values: retro.q };
+  const [retroData, fc] = await Promise.all([retro ?? retroDaily(rids), latestForecastEnsembleDaily(rids)]);
+  const sim = { dates: retroData.dates, values: retroData.q };
   const meanCor = correctForecast({ dates: fc.dates, values: fc.mean }, sim, obs);
   const factor = fc.dates.map((_, d) =>
     fc.mean[d] > 0 ? Math.min(5, Math.max(0.2, meanCor.values[d] / fc.mean[d])) : 1);

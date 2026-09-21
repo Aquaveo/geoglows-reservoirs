@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-plugin-zoom": "^2.2.0",
+    "date-fns": "^4.4.0",
     "maplibre-gl": "^6.0.0",
     "numcodecs": "^0.3.2",
     "riverforecastsystem": "file:../npmjs-riverforecastsystem"
