@@ -5,7 +5,10 @@
   "type": "module",
   "description": "Generic, no-backend reservoir monitor built on GEOGLOWS v2 (client-side model).",
   "scripts": {
+    "reservoirs": "node scripts/build-index.mjs",
+    "predev": "node scripts/build-index.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/build-index.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

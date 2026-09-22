@@ -10,8 +10,16 @@
       <h1>GEOGLOWS Reservoirs</h1>
       <span class="app-subtitle">Reservoir levels &amp; forecasts from GEOGLOWS</span>
     </header>
-    <main id="map"></main>
-    <aside id="panel" hidden></aside>
+    <div id="layout">
+      <nav id="sidebar">
+        <h2 class="sidebar-title">Reservoirs</h2>
+        <ul id="reservoir-list"></ul>
+      </nav>
+      <div id="main">
+        <div id="map"></div>
+        <aside id="panel" hidden></aside>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

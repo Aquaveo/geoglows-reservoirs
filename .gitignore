@@ -3,3 +3,6 @@ dist/
 *.local
 .DS_Store
 .vite/
+
+# Generated from the bundle files by scripts/build-index.mjs (predev/prebuild).
+public/reservoirs/index.json
