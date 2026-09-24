@@ -25,10 +25,12 @@ npm run preview
 ```
 
 ## Adding a reservoir
-Drop one bundle file — `public/reservoirs/<id>.json` — into the folder. The map
-marker, sidebar entry, and `index.json` regenerate automatically via
-`scripts/build-index.mjs` (runs on `npm run dev` and `npm run build`, or manually
-with `npm run reservoirs`). `index.json` is generated — don't edit it by hand.
+1. Copy [`examples/reservoir.example.json`](examples/reservoir.example.json) to `public/reservoirs/<id>.json`.
+2. Fill in your reservoir's data (fields and sourcing below).
+3. Run `npm run dev` (or `npm run build`). The map marker, sidebar entry, and
+   `index.json` regenerate automatically via `scripts/build-index.mjs` (or run
+   `npm run reservoirs`), which warns on any missing field. `index.json` is
+   generated — don't edit it by hand.
 
 ### Bundle format (`public/reservoirs/<id>.json`)
 | field | type | description |
@@ -44,9 +46,19 @@ with `npm run reservoirs`). `index.json` is generated — don't edit it by hand.
 | `observed_levels` | `{dates:string[], levels:(number\|null)[]}` | observed level (m); `null` marks a gap. Last non-null point is the reconstruction anchor |
 | `observed_inflow` | `{dates:string[], qin:number[]}` | observed inflow (m³/s) — the bias-correction target |
 
-Dates are `YYYY-MM-DD`. For the Dominican Republic reservoirs these are extracted
-once from the Tethys app's Excel workbooks; author them from your own data for a
-new reservoir.
+Dates are `YYYY-MM-DD`.
+
+### Where each field comes from
+- **`river_ids`** — GEOGLOWS v2 reach IDs (LINKNO) of the rivers flowing into the reservoir; inflow is summed across them. Find them on the GEOGLOWS RFS map (apps.geoglows.org) or via the GEOGLOWS API.
+- **`bathymetry`** — the reservoir's elevation↔storage curve from a bathymetric survey: `elev` in metres (ascending), `vol` the matching storage in m³.
+- **`rule`** — the outflow operation rule (a fitted piecewise-linear hedging curve). If you don't have one, start with a rough default and refine.
+- **`observed_levels` / `observed_inflow`** — historical daily records from the dam operator (level in m, inflow in m³/s). Insert a `null` level to break the plotted line across a real gap.
+- **`min_level` / `max_level`** — the operating band (drawn as reference lines); **`ymin`** is an optional y-axis floor for the history plot.
+
+> Bias correction maps GEOGLOWS inflow onto your observed inflow **per calendar month**, so it needs a substantial observed-inflow history (ideally several years covering all months). The tiny series in the example only show the shape — they won't produce a meaningful forecast.
+
+For the Dominican Republic reservoirs these fields are extracted once from the
+Tethys app's Excel workbooks; author them from your own data for a new reservoir.
 
 ## How it works (per reservoir, in the browser)
 1. Fetch GEOGLOWS v2 **retrospective** inflow and bias-correct it against the
