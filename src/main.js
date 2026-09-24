@@ -1,9 +1,9 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
-import { qinToToday, forecastBand } from './pipeline.js';
+import { qinToToday, forecastEnsemble } from './pipeline.js';
 import { retroDaily } from './geoglows.js';
-import { reconstruct } from './engine.js';
+import { reconstruct, propagateBand, bandStats } from './engine.js';
 import { renderHistoryChart, renderForecastChart } from './chart.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -17,22 +17,25 @@ function loadBundle(id) {
   return bundleCache.get(id);
 }
 
-// Keyless CARTO Voyager raster basemap (OSM data, © CARTO).
+// Keyless Esri World Imagery (satellite) + place labels — colorful and dark-toned,
+// the basemap family GEOGLOWS uses.
+const esri = (service) =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`;
 const style = {
   version: 8,
   sources: {
-    carto: {
+    esriBase: {
       type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-      ],
+      tiles: [esri('World_Imagery')],
       tileSize: 256,
-      attribution: '© OpenStreetMap contributors © CARTO',
+      attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS user community',
     },
+    esriRef: { type: 'raster', tiles: [esri('Reference/World_Boundaries_and_Places')], tileSize: 256 },
   },
-  layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+  layers: [
+    { id: 'esri-base', type: 'raster', source: 'esriBase' },
+    { id: 'esri-ref', type: 'raster', source: 'esriRef' },
+  ],
 };
 
 const map = new maplibregl.Map({
@@ -75,8 +78,14 @@ function computeReservoir(bundle) {
       const retro = await retroDaily(bundle.river_ids);
       const qin = await qinToToday(bundle, retro);
       const reconstruction = reconstruct(bundle, qin);
-      const band = await forecastBand(bundle, reconstruction.anchorLevel, retro);
-      return { reconstruction, band };
+      const { dates, ensMatrix } = await forecastEnsemble(bundle, retro);
+      // Re-propagate the band from any anchor (instant, no refetch).
+      const recomputeBand = (anchorLevel) => {
+        const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix);
+        return bandStats(dates, traj, qoutSeq);
+      };
+      const band = recomputeBand(reconstruction.anchorLevel);
+      return { reconstruction, band, recomputeBand };
     })();
     p.catch(() => resultCache.delete(bundle.id));
     resultCache.set(bundle.id, p);
@@ -84,27 +93,55 @@ function computeReservoir(bundle) {
   return resultCache.get(bundle.id);
 }
 
+// Today's-level control: re-propagate the forecast band from a chosen anchor.
+function wireAnchor(bundle, estimate, recomputeBand) {
+  const num = panel.querySelector('#anchor-num');
+  const slider = panel.querySelector('#anchor-slider');
+  for (const el of [num, slider]) { el.min = bundle.min_level - 3; el.max = bundle.max_level + 2; }
+  num.value = estimate.toFixed(2);
+  slider.value = estimate;
+
+  let timer;
+  const apply = (v) => {
+    clearTimeout(timer);
+    if (Number.isNaN(v)) return;
+    timer = setTimeout(() => {
+      renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: recomputeBand(v) });
+    }, 150);
+  };
+  num.addEventListener('input', () => { slider.value = num.value; apply(parseFloat(num.value)); });
+  slider.addEventListener('input', () => { num.value = parseFloat(slider.value).toFixed(2); apply(parseFloat(slider.value)); });
+  panel.querySelector('#anchor-reset').addEventListener('click', () => {
+    num.value = estimate.toFixed(2); slider.value = estimate; apply(estimate);
+  });
+}
+
 async function showReservoir(r) {
   panel.hidden = false;
   setActive(r.id);
   panel.innerHTML = shell(r.name,
     `<div class="loading"><span class="spinner"></span>
-      <span>Computing level from GEOGLOWS v2…<br>
-      <span class="muted">first load ~15–35 s · cached after</span></span></div>`);
+      <span>Computing level from GEOGLOWS v2…</span></div>`);
   panel.querySelector('.panel-close').onclick = closePanel;
   try {
     const bundle = await loadBundle(r.id);
-    const { reconstruction, band } = await computeReservoir(bundle);
+    const { reconstruction, band, recomputeBand } = await computeReservoir(bundle);
     panel.innerHTML = shell(r.name, `
-      <p class="muted">Today ~${reconstruction.anchorLevel.toFixed(2)} m ·
-        operating band ${bundle.min_level}–${bundle.max_level} m · scroll to zoom</p>
+      <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m · scroll to zoom</p>
       <h3>History</h3>
       <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
       <h3>15-day forecast</h3>
+      <div class="anchor-ctl">
+        <label for="anchor-num">Today's level (m)</label>
+        <input type="number" id="anchor-num" step="0.05">
+        <input type="range" id="anchor-slider" step="0.05">
+        <button class="btn-reset" id="anchor-reset" title="Reset to model estimate">Reset</button>
+      </div>
       <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>`);
     panel.querySelector('.panel-close').onclick = closePanel;
     renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
     renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band });
+    wireAnchor(bundle, reconstruction.anchorLevel, recomputeBand);
   } catch (err) {
     panel.innerHTML = shell(r.name,
       `<p class="error">Failed to load: ${err.message}</p><button class="btn-retry">Retry</button>`);
@@ -119,7 +156,7 @@ async function buildUI() {
   const list = document.getElementById('reservoir-list');
   const bounds = new maplibregl.LngLatBounds();
   for (const r of reservoirs) {
-    const marker = new maplibregl.Marker({ color: '#1d6fb8' })
+    const marker = new maplibregl.Marker({ color: '#38bdf8' })
       .setLngLat([r.lon, r.lat])
       .addTo(map);
     const el = marker.getElement();

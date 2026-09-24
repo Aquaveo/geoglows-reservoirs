@@ -4,6 +4,11 @@ import zoomPlugin from 'chartjs-plugin-zoom';
 
 Chart.register(zoomPlugin);
 
+// Theme-aware chart colors for the dark panel (GEOGLOWS convention).
+const AXIS = '#94a3b8';
+const GRID = 'rgba(148,163,184,0.12)';
+const TEXT = '#e2e8f0';
+
 const pt = (dates, values) => dates.map((d, i) => ({ x: d, y: values[i] }));
 const ms = (isoDate) => new Date(isoDate).getTime();
 const opLines = (min, max, x0, x1) => [
@@ -13,11 +18,11 @@ const opLines = (min, max, x0, x1) => [
 
 // xRange (optional): { view: {min,max}, limits: {min,max} } in epoch ms — sets the
 // default visible window and how far the user may zoom/pan out.
-const baseOptions = (xRange) => {
-  const x = { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd' } };
+const baseOptions = (xRange, { pan = true } = {}) => {
+  const x = { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd' }, ticks: { color: AXIS }, grid: { color: GRID } };
   const zoom = {
     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-    pan: { enabled: true, mode: 'x' },
+    pan: { enabled: pan, mode: 'x' },
   };
   if (xRange) {
     x.min = xRange.view.min;
@@ -28,10 +33,13 @@ const baseOptions = (xRange) => {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    scales: { x, y: { title: { display: true, text: 'Level (m)' } } },
+    scales: {
+      x,
+      y: { title: { display: true, text: 'Level (m)', color: AXIS }, ticks: { color: AXIS }, grid: { color: GRID } },
+    },
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { labels: { boxWidth: 12, font: { size: 10 }, filter: (l) => !l.text.startsWith('_') } },
+      legend: { labels: { color: TEXT, boxWidth: 12, font: { size: 10 }, filter: (l) => !l.text.startsWith('_') } },
       zoom,
     },
   };
@@ -77,7 +85,8 @@ export function renderForecastChart(canvas, { bundle, band }) {
         { label: 'Median', data: pt(band.dates, band.median), borderColor: '#c81e1e', borderWidth: 2, pointRadius: 0 },
       ],
     },
-    options: baseOptions(),
+    options: baseOptions(undefined, { pan: false }),
   });
+  canvas.ondblclick = () => forecastChart.resetZoom(); // wheel-zoom only; dbl-click resets
   return forecastChart;
 }

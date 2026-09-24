@@ -32,10 +32,8 @@ export async function qinToToday(bundle, retro) {
   }
 }
 
-// Ensemble forecast band from the anchor: correct the ensemble mean, scale every
-// member by the per-day factor, then propagate. Returns bandStats { dates, min, ... }.
-// Pass a pre-fetched retro to avoid re-downloading it.
-export async function forecastBand(bundle, anchorLevel, retro) {
+// Bias-corrected daily ensemble inflow matrix (days x members), anchor-independent.
+export async function forecastEnsemble(bundle, retro) {
   const rids = bundle.river_ids;
   const obs = { dates: bundle.observed_inflow.dates, values: bundle.observed_inflow.qin };
   const [retroData, fc] = await Promise.all([retro ?? retroDaily(rids), latestForecastEnsembleDaily(rids)]);
@@ -44,6 +42,12 @@ export async function forecastBand(bundle, anchorLevel, retro) {
   const factor = fc.dates.map((_, d) =>
     fc.mean[d] > 0 ? Math.min(5, Math.max(0.2, meanCor.values[d] / fc.mean[d])) : 1);
   const ensMatrix = fc.dates.map((_, d) => fc.members.map((mem) => mem[d] * factor[d]));
+  return { dates: fc.dates, ensMatrix };
+}
+
+// Ensemble forecast band from the anchor -> bandStats { dates, min, ... }.
+export async function forecastBand(bundle, anchorLevel, retro) {
+  const { dates, ensMatrix } = await forecastEnsemble(bundle, retro);
   const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix);
-  return bandStats(fc.dates, traj, qoutSeq);
+  return bandStats(dates, traj, qoutSeq);
 }
