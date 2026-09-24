@@ -18,8 +18,10 @@ const opLines = (min, max, x0, x1) => [
 
 // xRange (optional): { view: {min,max}, limits: {min,max} } in epoch ms — sets the
 // default visible window and how far the user may zoom/pan out.
-const baseOptions = (xRange, { pan = true } = {}) => {
-  const x = { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd' }, ticks: { color: AXIS }, grid: { color: GRID } };
+const baseOptions = (xRange, { pan = true, unit } = {}) => {
+  const time = { tooltipFormat: 'yyyy-MM-dd' };
+  if (unit) { time.unit = unit; time.displayFormats = { [unit]: 'MMM d' }; }
+  const x = { type: 'time', time, ticks: { color: AXIS, maxRotation: 0, autoSkip: true }, grid: { color: GRID } };
   const zoom = {
     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
     pan: { enabled: pan, mode: 'x' },
@@ -85,7 +87,7 @@ export function renderForecastChart(canvas, { bundle, band }) {
         { label: 'Median', data: pt(band.dates, band.median), borderColor: '#c81e1e', borderWidth: 2, pointRadius: 0 },
       ],
     },
-    options: baseOptions(undefined, { pan: false }),
+    options: baseOptions(undefined, { pan: false, unit: 'day' }),
   });
   canvas.ondblclick = () => forecastChart.resetZoom(); // wheel-zoom only; dbl-click resets
   return forecastChart;

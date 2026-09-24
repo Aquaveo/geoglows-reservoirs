@@ -93,8 +93,8 @@ function computeReservoir(bundle) {
   return resultCache.get(bundle.id);
 }
 
-// Today's-level control: re-propagate the forecast band from a chosen anchor.
-function wireAnchor(bundle, estimate, recomputeBand) {
+// Today's-level control: calls onAnchor(level) (debounced) when changed.
+function wireAnchor(bundle, estimate, onAnchor) {
   const num = panel.querySelector('#anchor-num');
   const slider = panel.querySelector('#anchor-slider');
   for (const el of [num, slider]) { el.min = bundle.min_level - 3; el.max = bundle.max_level + 2; }
@@ -105,9 +105,7 @@ function wireAnchor(bundle, estimate, recomputeBand) {
   const apply = (v) => {
     clearTimeout(timer);
     if (Number.isNaN(v)) return;
-    timer = setTimeout(() => {
-      renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: recomputeBand(v) });
-    }, 150);
+    timer = setTimeout(() => onAnchor(v), 150);
   };
   num.addEventListener('input', () => { slider.value = num.value; apply(parseFloat(num.value)); });
   slider.addEventListener('input', () => { num.value = parseFloat(slider.value).toFixed(2); apply(parseFloat(slider.value)); });
@@ -127,21 +125,40 @@ async function showReservoir(r) {
     const bundle = await loadBundle(r.id);
     const { reconstruction, band, recomputeBand } = await computeReservoir(bundle);
     panel.innerHTML = shell(r.name, `
-      <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m · scroll to zoom</p>
-      <h3>History</h3>
-      <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
-      <h3>15-day forecast</h3>
-      <div class="anchor-ctl">
-        <label for="anchor-num">Today's level (m)</label>
-        <input type="number" id="anchor-num" step="0.05">
-        <input type="range" id="anchor-slider" step="0.05">
-        <button class="btn-reset" id="anchor-reset" title="Reset to model estimate">Reset</button>
+      <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m</p>
+      <div class="tabs">
+        <button class="tab" data-tab="history">History</button>
+        <button class="tab" data-tab="forecast">15-day forecast</button>
       </div>
-      <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>`);
+      <div class="tab-panel" data-panel="history">
+        <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
+      </div>
+      <div class="tab-panel" data-panel="forecast" hidden>
+        <div class="anchor-ctl">
+          <label for="anchor-num">Today's level (m)</label>
+          <input type="number" id="anchor-num" step="0.05">
+          <input type="range" id="anchor-slider" step="0.05">
+          <button class="btn-reset" id="anchor-reset" title="Reset to model estimate">Reset</button>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>
+      </div>`);
     panel.querySelector('.panel-close').onclick = closePanel;
-    renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
-    renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band });
-    wireAnchor(bundle, reconstruction.anchorLevel, recomputeBand);
+
+    let currentBand = band;
+    const showTab = (name) => {
+      panel.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+      panel.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });
+      if (name === 'history') renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
+      else renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: currentBand });
+    };
+    panel.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
+
+    wireAnchor(bundle, reconstruction.anchorLevel, (v) => {
+      currentBand = recomputeBand(v);
+      renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: currentBand });
+    });
+
+    showTab('history');
   } catch (err) {
     panel.innerHTML = shell(r.name,
       `<p class="error">Failed to load: ${err.message}</p><button class="btn-retry">Retry</button>`);
