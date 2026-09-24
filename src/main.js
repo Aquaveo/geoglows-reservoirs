@@ -66,8 +66,10 @@ function closePanel() {
   setActive(null);
 }
 
+const esc = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const shell = (name, inner) =>
-  `<button class="panel-close" aria-label="Close">×</button><h2>${name}</h2>${inner}`;
+  `<button class="panel-close" aria-label="Close">×</button><h2>${esc(name)}</h2>${inner}`;
 
 // Fetch retro once, run qin -> reconstruct -> band, memoized per reservoir.
 // Evict on failure so a retry refetches rather than replaying the rejection.
@@ -93,22 +95,36 @@ function computeReservoir(bundle) {
   return resultCache.get(bundle.id);
 }
 
-// Today's-level control: calls onAnchor(level) (debounced) when changed.
+// Today's-level control: calls onAnchor(level), debounced and clamped, when changed.
 function wireAnchor(bundle, estimate, onAnchor) {
   const num = panel.querySelector('#anchor-num');
   const slider = panel.querySelector('#anchor-slider');
-  for (const el of [num, slider]) { el.min = bundle.min_level - 3; el.max = bundle.max_level + 2; }
+  const lo = Math.min(bundle.min_level - 3, estimate);
+  const hi = Math.max(bundle.max_level + 2, estimate);
+  const clamp = (v) => Math.min(Math.max(v, lo), hi);
+  for (const el of [num, slider]) { el.min = lo; el.max = hi; }
   num.value = estimate.toFixed(2);
   slider.value = estimate;
 
   let timer;
   const apply = (v) => {
-    clearTimeout(timer);
     if (Number.isNaN(v)) return;
-    timer = setTimeout(() => onAnchor(v), 150);
+    clearTimeout(timer);
+    timer = setTimeout(() => onAnchor(clamp(v)), 150);
   };
-  num.addEventListener('input', () => { slider.value = num.value; apply(parseFloat(num.value)); });
-  slider.addEventListener('input', () => { num.value = parseFloat(slider.value).toFixed(2); apply(parseFloat(slider.value)); });
+  num.addEventListener('input', () => {
+    const c = clamp(parseFloat(num.value));
+    if (!Number.isNaN(c)) slider.value = c;
+    apply(parseFloat(num.value));
+  });
+  num.addEventListener('change', () => {
+    const c = clamp(parseFloat(num.value));
+    if (!Number.isNaN(c)) num.value = c.toFixed(2);
+  });
+  slider.addEventListener('input', () => {
+    num.value = parseFloat(slider.value).toFixed(2);
+    apply(parseFloat(slider.value));
+  });
   panel.querySelector('#anchor-reset').addEventListener('click', () => {
     num.value = estimate.toFixed(2); slider.value = estimate; apply(estimate);
   });
@@ -161,7 +177,7 @@ async function showReservoir(r) {
     showTab('history');
   } catch (err) {
     panel.innerHTML = shell(r.name,
-      `<p class="error">Failed to load: ${err.message}</p><button class="btn-retry">Retry</button>`);
+      `<p class="error">Failed to load: ${esc(err.message)}</p><button class="btn-retry">Retry</button>`);
     panel.querySelector('.panel-close').onclick = closePanel;
     panel.querySelector('.btn-retry').onclick = () => showReservoir(r);
   }
