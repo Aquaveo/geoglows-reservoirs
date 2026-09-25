@@ -92,3 +92,25 @@ export function renderForecastChart(canvas, { bundle, band }) {
   canvas.ondblclick = () => forecastChart.resetZoom(); // wheel-zoom only; dbl-click resets
   return forecastChart;
 }
+
+// 15-day forecast, all ensemble member trajectories + median + operating lines.
+export function renderEnsembleChart(canvas, { bundle, band }) {
+  if (forecastChart) forecastChart.destroy();
+  const members = band.members.map((m) => ({
+    label: '_member', data: pt(band.dates, m),
+    borderColor: 'rgba(148,163,184,0.35)', borderWidth: 1, pointRadius: 0,
+  }));
+  forecastChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      datasets: [
+        ...opLines(bundle.min_level, bundle.max_level, band.dates[0], band.dates.at(-1)),
+        ...members,
+        { label: 'Median', data: pt(band.dates, band.median), borderColor: '#c81e1e', borderWidth: 2, pointRadius: 0 },
+      ],
+    },
+    options: baseOptions(undefined, { pan: false, unit: 'day' }),
+  });
+  canvas.ondblclick = () => forecastChart.resetZoom();
+  return forecastChart;
+}

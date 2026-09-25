@@ -4,7 +4,7 @@ import './style.css';
 import { qinToToday, forecastEnsemble } from './pipeline.js';
 import { retroDaily } from './geoglows.js';
 import { reconstruct, propagateBand, bandStats } from './engine.js';
-import { renderHistoryChart, renderForecastChart } from './chart.js';
+import { renderHistoryChart, renderForecastChart, renderEnsembleChart } from './chart.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -81,9 +81,9 @@ function computeReservoir(bundle) {
       const qin = await qinToToday(bundle, retro);
       const reconstruction = reconstruct(bundle, qin);
       const { dates, ensMatrix } = await forecastEnsemble(bundle, retro);
-      // Re-propagate the band from any anchor (instant, no refetch).
-      const recomputeBand = (anchorLevel) => {
-        const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix);
+      // Re-propagate the band from any anchor + optional manual outflow (instant).
+      const recomputeBand = (anchorLevel, qoutOverride) => {
+        const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix, qoutOverride);
         return bandStats(dates, traj, qoutSeq);
       };
       const band = recomputeBand(reconstruction.anchorLevel);
@@ -130,6 +130,49 @@ function wireAnchor(bundle, estimate, onAnchor) {
   });
 }
 
+// Wire the forecast tab (anchor, stats/ensembles view, rule/manual outflow).
+// Returns render() to (re)draw the active view; state persists across tab switches.
+function setupForecast(bundle, reconstruction, initialBand, recomputeBand) {
+  let band = initialBand;
+  let anchor = reconstruction.anchorLevel;
+  let qout = null; // null = rule (auto); array = manual override
+  let view = 'stats';
+
+  const canvas = () => panel.querySelector('#chart-forecast');
+  const render = () => (view === 'stats' ? renderForecastChart : renderEnsembleChart)(canvas(), { bundle, band });
+  const recompute = () => { band = recomputeBand(anchor, qout); render(); };
+
+  wireAnchor(bundle, anchor, (v) => { anchor = v; recompute(); });
+
+  const segs = (sel, fn) => panel.querySelectorAll(sel).forEach((b) => {
+    b.onclick = () => { panel.querySelectorAll(sel).forEach((x) => x.classList.toggle('active', x === b)); fn(b); };
+  });
+  segs('#view-toggle .seg', (b) => { view = b.dataset.view; render(); });
+
+  const tableWrap = panel.querySelector('.qout-table-wrap');
+  let qTimer;
+  const buildTable = () => {
+    tableWrap.innerHTML = `<table class="qout-table"><thead><tr>${
+      band.dates.map((d) => `<th>${d.slice(5)}</th>`).join('')
+    }</tr></thead><tbody><tr>${
+      band.qout.map((q) => `<td><input type="number" step="0.1" value="${q.toFixed(1)}"></td>`).join('')
+    }</tr></tbody></table>`;
+    tableWrap.querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => {
+      clearTimeout(qTimer);
+      qTimer = setTimeout(() => {
+        qout = [...tableWrap.querySelectorAll('input')].map((i) => parseFloat(i.value) || 0);
+        recompute();
+      }, 200);
+    }));
+  };
+  segs('#qout-toggle .seg', (b) => {
+    if (b.dataset.qmode === 'rule') { qout = null; tableWrap.hidden = true; recompute(); }
+    else { buildTable(); tableWrap.hidden = false; } // prefill from the current rule schedule
+  });
+
+  return render;
+}
+
 async function showReservoir(r) {
   panel.hidden = false;
   setActive(r.id);
@@ -156,24 +199,32 @@ async function showReservoir(r) {
           <input type="range" id="anchor-slider" step="0.05">
           <button class="btn-reset" id="anchor-reset" title="Reset to model estimate">Reset</button>
         </div>
+        <div class="fc-row">
+          <div class="seg-group" id="view-toggle">
+            <button class="seg active" data-view="stats">Statistics</button>
+            <button class="seg" data-view="ensembles">Ensembles</button>
+          </div>
+          <div class="seg-labeled">
+            <span class="seg-label">Outflow</span>
+            <div class="seg-group" id="qout-toggle">
+              <button class="seg active" data-qmode="rule">Rule</button>
+              <button class="seg" data-qmode="manual">Manual</button>
+            </div>
+          </div>
+        </div>
+        <div class="qout-table-wrap" hidden></div>
         <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>
       </div>`);
     panel.querySelector('.panel-close').onclick = closePanel;
 
-    let currentBand = band;
+    const renderForecast = setupForecast(bundle, reconstruction, band, recomputeBand);
     const showTab = (name) => {
       panel.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
       panel.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });
       if (name === 'history') renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
-      else renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: currentBand });
+      else renderForecast();
     };
     panel.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
-
-    wireAnchor(bundle, reconstruction.anchorLevel, (v) => {
-      currentBand = recomputeBand(v);
-      renderForecastChart(panel.querySelector('#chart-forecast'), { bundle, band: currentBand });
-    });
-
     showTab('history');
   } catch (err) {
     panel.innerHTML = shell(r.name,

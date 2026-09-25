@@ -145,6 +145,36 @@ html, body {
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+.fc-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 6px 0 10px; }
+.seg-labeled { display: inline-flex; align-items: center; gap: 8px; }
+.seg-label { color: var(--text-dim); font-size: 0.8rem; }
+.seg-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg {
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.seg + .seg { border-left: 1px solid var(--border); }
+.seg:hover { color: var(--text); }
+.seg.active { background: rgba(56, 189, 248, 0.18); color: var(--accent); }
+
+.qout-table-wrap { overflow-x: auto; margin: 0 0 10px; }
+.qout-table { border-collapse: collapse; font-size: 0.75rem; }
+.qout-table th { padding: 2px 4px; color: var(--text-dim); font-weight: 600; }
+.qout-table td { padding: 1px 2px; }
+.qout-table input {
+  width: 58px;
+  padding: 3px 4px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
 .anchor-ctl { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; flex-wrap: wrap; }
 .anchor-ctl label { color: var(--text-dim); font-size: 0.8rem; }
 .anchor-ctl input[type="number"] {
