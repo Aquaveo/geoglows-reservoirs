@@ -49,7 +49,16 @@ map.addControl(new maplibregl.NavigationControl(), 'top-right');
 const panel = document.getElementById('panel');
 const markerEls = new Map(); // id -> marker element
 const listEls = new Map();   // id -> sidebar <li>
+const idCountry = new Map(); // id -> country (folder)
+const groups = new Map();    // country -> { itemsEl, headerEl }
 let selectedId = null;
+
+function expandGroup(country, expand) {
+  const g = groups.get(country);
+  if (!g) return;
+  g.itemsEl.hidden = !expand;
+  g.headerEl.classList.toggle('expanded', expand);
+}
 
 function setActive(id) {
   if (selectedId) {
@@ -57,8 +66,11 @@ function setActive(id) {
     listEls.get(selectedId)?.classList.remove('active');
   }
   selectedId = id;
-  markerEls.get(id)?.classList.add('selected');
-  listEls.get(id)?.classList.add('active');
+  if (id) {
+    markerEls.get(id)?.classList.add('selected');
+    listEls.get(id)?.classList.add('active');
+    expandGroup(idCountry.get(id), true); // auto-expand the containing folder
+  }
 }
 
 function closePanel() {
@@ -234,29 +246,68 @@ async function showReservoir(r) {
   }
 }
 
-// Build the sidebar list + map markers from the reservoir index.
+const EYE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+// Build the sidebar as country folders + map markers from the reservoir index.
 async function buildUI() {
   const reservoirs = await fetch(`${BASE}reservoirs/index.json`).then((r) => r.json());
   const list = document.getElementById('reservoir-list');
   const bounds = new maplibregl.LngLatBounds();
+
+  const byCountry = new Map();
   for (const r of reservoirs) {
-    const marker = new maplibregl.Marker({ color: '#38bdf8' })
-      .setLngLat([r.lon, r.lat])
-      .addTo(map);
-    const el = marker.getElement();
-    el.classList.add('reservoir-marker');
-    el.style.cursor = 'pointer';
-    el.title = r.name;
-    el.addEventListener('click', () => showReservoir(r));
-    markerEls.set(r.id, el);
+    if (!byCountry.has(r.country)) byCountry.set(r.country, []);
+    byCountry.get(r.country).push(r);
+    idCountry.set(r.id, r.country);
+  }
 
-    const li = document.createElement('li');
-    li.textContent = r.name;
-    li.addEventListener('click', () => showReservoir(r));
-    list.appendChild(li);
-    listEls.set(r.id, li);
+  for (const [country, items] of [...byCountry].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const groupEl = document.createElement('li');
+    groupEl.className = 'group';
+    const header = document.createElement('div');
+    header.className = 'group-header expanded';
+    header.innerHTML = `<span class="chevron"></span><span class="group-name"></span>`
+      + `<span class="group-count">${items.length}</span>`
+      + `<button class="eye" title="Show/hide on map" aria-label="Show/hide on map">${EYE_SVG}</button>`;
+    header.querySelector('.group-name').textContent = country;
+    const itemsEl = document.createElement('ul');
+    itemsEl.className = 'group-items';
 
-    bounds.extend([r.lon, r.lat]);
+    const groupMarkers = [];
+    for (const r of items.sort((a, b) => a.name.localeCompare(b.name))) {
+      const marker = new maplibregl.Marker({ color: '#38bdf8' }).setLngLat([r.lon, r.lat]).addTo(map);
+      const el = marker.getElement();
+      el.classList.add('reservoir-marker');
+      el.style.cursor = 'pointer';
+      el.title = r.name;
+      el.addEventListener('click', () => showReservoir(r));
+      markerEls.set(r.id, el);
+      groupMarkers.push(el);
+
+      const li = document.createElement('li');
+      li.className = 'reservoir-item';
+      li.textContent = r.name;
+      li.addEventListener('click', () => showReservoir(r));
+      itemsEl.appendChild(li);
+      listEls.set(r.id, li);
+      bounds.extend([r.lon, r.lat]);
+    }
+
+    groups.set(country, { itemsEl, headerEl: header });
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('.eye')) return;
+      expandGroup(country, itemsEl.hidden); // toggle
+    });
+    let visible = true;
+    header.querySelector('.eye').addEventListener('click', (e) => {
+      e.stopPropagation();
+      visible = !visible;
+      groupMarkers.forEach((m) => { m.style.display = visible ? '' : 'none'; });
+      e.currentTarget.classList.toggle('off', !visible);
+    });
+
+    groupEl.append(header, itemsEl);
+    list.appendChild(groupEl);
   }
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 80, maxZoom: 9 });
 }

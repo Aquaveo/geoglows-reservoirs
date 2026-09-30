@@ -16,7 +16,7 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.json') && f !== '
   for (const k of ['id', 'name', 'lat', 'lon']) {
     if (b[k] === undefined) throw new Error(`${file}: cannot index without ${k}`);
   }
-  index.push({ id: b.id, name: b.name, lat: b.lat, lon: b.lon });
+  index.push({ id: b.id, name: b.name, country: b.country || 'Other', lat: b.lat, lon: b.lon });
 }
 index.sort((a, b) => a.name.localeCompare(b.name));
 writeFileSync(join(dir, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);

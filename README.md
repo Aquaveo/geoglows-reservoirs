@@ -37,6 +37,7 @@ npm run preview
 | --- | --- | --- |
 | `id` | string | unique id; matches the filename (`<id>.json`) |
 | `name` | string | display name |
+| `country` | string | groups the reservoir into a sidebar folder (defaults to "Other") |
 | `lat`, `lon` | number | marker location |
 | `min_level`, `max_level` | number | operating band (m) |
 | `ymin` | number | optional y-axis floor for plots |

@@ -70,14 +70,45 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 #reservoir-list { list-style: none; margin: 0; padding: 0; }
-#reservoir-list li {
-  padding: 10px 16px;
+.group { list-style: none; }
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.group-header:hover { background: rgba(56, 189, 248, 0.06); }
+.chevron {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--text-dim);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s;
+}
+.group-header.expanded .chevron { transform: rotate(90deg); }
+.group-name { flex: 1; }
+.group-count { color: var(--text-dim); font-weight: 400; font-size: 0.75rem; }
+.eye { flex: none; display: flex; padding: 2px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; }
+.eye:hover { color: var(--text); }
+.eye.off { opacity: 0.35; }
+.group-items { list-style: none; margin: 0; padding: 0; }
+.group-items[hidden] { display: none; }
+.reservoir-item {
+  padding: 9px 12px 9px 30px;
   font-size: 0.9rem;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
 }
-#reservoir-list li:hover { background: rgba(56, 189, 248, 0.08); }
-#reservoir-list li.active {
+.reservoir-item:hover { background: rgba(56, 189, 248, 0.08); }
+.reservoir-item.active {
   background: rgba(56, 189, 248, 0.15);
   color: var(--accent);
   font-weight: 600;
