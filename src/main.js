@@ -5,6 +5,7 @@ import { qinToToday, forecastEnsemble } from './pipeline.js';
 import { retroDaily } from './geoglows.js';
 import { reconstruct, propagateBand, bandStats } from './engine.js';
 import { renderHistoryChart, renderForecastChart, renderEnsembleChart } from './chart.js';
+import { downloadCsv } from './csv.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -80,6 +81,31 @@ function closePanel() {
 
 const esc = (s) => String(s).replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// CSV rows for the History tab: one continuous level series, recent-first, tagged by
+// source. Observed and reconstruction spans are disjoint (they meet at the anchor).
+function historyRows(bundle, reconstruction) {
+  const rows = [['date', 'level_m', 'source']];
+  // Reconstruction (anchor->today); skip index 0, the anchor is the last observed row.
+  for (let i = reconstruction.dates.length - 1; i >= 1; i--) {
+    rows.push([reconstruction.dates[i], reconstruction.levels[i].toFixed(3), 'reconstruction']);
+  }
+  const { dates, levels } = bundle.observed_levels;
+  for (let i = dates.length - 1; i >= 0; i--) {
+    if (levels[i] != null) rows.push([dates[i], levels[i].toFixed(3), 'observed']);
+  }
+  return rows;
+}
+
+// CSV rows for the Forecast tab: the current percentile band + outflow schedule.
+function forecastRows(band) {
+  const rows = [['date', 'min_m', 'p25_m', 'median_m', 'p75_m', 'max_m', 'mean_m', 'outflow_m3s']];
+  band.dates.forEach((d, i) => rows.push([
+    d, band.min[i].toFixed(3), band.p25[i].toFixed(3), band.median[i].toFixed(3),
+    band.p75[i].toFixed(3), band.max[i].toFixed(3), band.mean[i].toFixed(3), band.qout[i].toFixed(3),
+  ]));
+  return rows;
+}
 const shell = (name, inner) =>
   `<button class="panel-close" aria-label="Close">×</button><h2>${esc(name)}</h2>${inner}`;
 
@@ -182,7 +208,7 @@ function setupForecast(bundle, reconstruction, initialBand, recomputeBand) {
     else { buildTable(); tableWrap.hidden = false; } // prefill from the current rule schedule
   });
 
-  return render;
+  return { render, getBand: () => band };
 }
 
 async function showReservoir(r) {
@@ -200,6 +226,7 @@ async function showReservoir(r) {
       <div class="tabs">
         <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="forecast">15-day forecast</button>
+        <button class="btn-download" id="dl-csv" title="Download the current tab's data as CSV">Download CSV</button>
       </div>
       <div class="tab-panel" data-panel="history">
         <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
@@ -229,14 +256,21 @@ async function showReservoir(r) {
       </div>`);
     panel.querySelector('.panel-close').onclick = closePanel;
 
-    const renderForecast = setupForecast(bundle, reconstruction, band, recomputeBand);
+    const fc = setupForecast(bundle, reconstruction, band, recomputeBand);
     const showTab = (name) => {
       panel.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
       panel.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });
       if (name === 'history') renderHistoryChart(panel.querySelector('#chart-history'), { bundle, reconstruction });
-      else renderForecast();
+      else fc.render();
     };
     panel.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
+    panel.querySelector('#dl-csv').onclick = () => {
+      if (panel.querySelector('.tab.active')?.dataset.tab === 'forecast') {
+        downloadCsv(`${r.id}-forecast.csv`, forecastRows(fc.getBand()));
+      } else {
+        downloadCsv(`${r.id}-history.csv`, historyRows(bundle, reconstruction));
+      }
+    };
     showTab('history');
   } catch (err) {
     panel.innerHTML = shell(r.name,

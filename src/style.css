@@ -176,6 +176,19 @@ html, body {
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+.btn-download {
+  margin-left: auto;
+  align-self: center;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.btn-download:hover { color: var(--accent); border-color: var(--accent); }
+
 .fc-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 6px 0 10px; }
 .seg-labeled { display: inline-flex; align-items: center; gap: 8px; }
 .seg-label { color: var(--text-dim); font-size: 0.8rem; }
