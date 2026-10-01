@@ -132,3 +132,36 @@ export function bandStats(dates, traj, qoutSeq) {
     qout: qoutSeq,
   };
 }
+
+// --- Manual-outflow inverse: drag a day's mean level to the outflow that achieves it ---
+
+const DRAIN_MAX = 1e7; // m^3/s bisection ceiling; clamps the balance to the dead pool
+
+// Member-mean forecast level per day for an explicit outflow schedule.
+function meanLevels(bundle, anchorLevel, ensMatrix, qoutSeq) {
+  const { traj } = propagateBand(bundle, anchorLevel, ensMatrix, qoutSeq);
+  return traj.map((row) => row.reduce((a, b) => a + b, 0) / row.length);
+}
+
+// Achievable mean-level range for `day`: release 0 (highest) to full drain (dead pool).
+export function levelBounds(bundle, anchorLevel, ensMatrix, qoutSeq, day) {
+  const hiSeq = qoutSeq.slice(); hiSeq[day] = 0;
+  const loSeq = qoutSeq.slice(); loSeq[day] = DRAIN_MAX;
+  return {
+    hi: meanLevels(bundle, anchorLevel, ensMatrix, hiSeq)[day],
+    lo: meanLevels(bundle, anchorLevel, ensMatrix, loSeq)[day],
+  };
+}
+
+// Outflow (m^3/s) on `day` whose mean level matches `target`, by bisection
+// (mean level decreases monotonically with outflow).
+export function solveQout(bundle, anchorLevel, ensMatrix, qoutSeq, day, target) {
+  let lo = 0, hi = DRAIN_MAX;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const seq = qoutSeq.slice(); seq[day] = mid;
+    if (meanLevels(bundle, anchorLevel, ensMatrix, seq)[day] > target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}

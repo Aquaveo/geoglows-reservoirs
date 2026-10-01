@@ -3,7 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { qinToToday, forecastEnsemble } from './pipeline.js';
 import { retroDaily } from './geoglows.js';
-import { reconstruct, propagateBand, bandStats } from './engine.js';
+import { reconstruct, propagateBand, bandStats, levelBounds, solveQout } from './engine.js';
 import { renderHistoryChart, renderForecastChart, renderEnsembleChart } from './chart.js';
 import { downloadCsv } from './csv.js';
 
@@ -124,8 +124,14 @@ function computeReservoir(bundle) {
         const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix, qoutOverride);
         return bandStats(dates, traj, qoutSeq);
       };
+      // Inverse (manual outflow): a day's achievable mean-level range, and the outflow
+      // that lands the mean at a dragged target.
+      const levelBoundsAt = (anchorLevel, qoutSeq, day) =>
+        levelBounds(bundle, anchorLevel, ensMatrix, qoutSeq, day);
+      const solveQoutAt = (anchorLevel, qoutSeq, day, target) =>
+        solveQout(bundle, anchorLevel, ensMatrix, qoutSeq, day, target);
       const band = recomputeBand(reconstruction.anchorLevel);
-      return { reconstruction, band, recomputeBand };
+      return { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt };
     })();
     p.catch(() => resultCache.delete(bundle.id));
     resultCache.set(bundle.id, p);
@@ -134,7 +140,8 @@ function computeReservoir(bundle) {
 }
 
 // Today's-level control: calls onAnchor(level), debounced and clamped, when changed.
-function wireAnchor(bundle, estimate, onAnchor) {
+// onReset (optional) fires after the Reset button restores the estimate.
+function wireAnchor(bundle, estimate, onAnchor, onReset) {
   const num = panel.querySelector('#anchor-num');
   const slider = panel.querySelector('#anchor-slider');
   const lo = Math.min(bundle.min_level - 3, estimate);
@@ -165,32 +172,60 @@ function wireAnchor(bundle, estimate, onAnchor) {
   });
   panel.querySelector('#anchor-reset').addEventListener('click', () => {
     num.value = estimate.toFixed(2); slider.value = estimate; apply(estimate);
+    onReset?.();
   });
 }
 
 // Wire the forecast tab (anchor, stats/ensembles view, rule/manual outflow).
 // Returns render() to (re)draw the active view; state persists across tab switches.
-function setupForecast(bundle, reconstruction, initialBand, recomputeBand) {
+function setupForecast(bundle, reconstruction, initialBand, recomputeBand, levelBoundsAt, solveQoutAt) {
   let band = initialBand;
   let anchor = reconstruction.anchorLevel;
   let qout = null; // null = rule (auto); array = manual override
   let view = 'stats';
 
   const canvas = () => panel.querySelector('#chart-forecast');
-  const render = () => (view === 'stats' ? renderForecastChart : renderEnsembleChart)(canvas(), { bundle, band });
+  const tableWrap = panel.querySelector('.qout-table-wrap');
+
+  // Drag the Mean line (manual mode): clamp to the day's achievable range, back-solve
+  // the outflow, update the table cell, and re-propagate.
+  let dragLo = -Infinity, dragHi = Infinity;
+  const drag = {
+    start: (day) => { ({ lo: dragLo, hi: dragHi } = levelBoundsAt(anchor, qout, day)); },
+    inBounds: (v) => v >= dragLo && v <= dragHi,
+    end: (day, value) => {
+      const level = typeof value === 'number' ? value : value.y; // onDragEnd passes the {x,y} point
+      const target = Math.min(Math.max(level, dragLo), dragHi);
+      qout[day] = solveQoutAt(anchor, qout, day, target);
+      const inp = tableWrap.querySelectorAll('input')[day];
+      if (inp) inp.value = qout[day].toFixed(1);
+      setTimeout(recompute, 0); // defer: don't rebuild the chart inside its own drag event
+    },
+  };
+
+  const render = () => {
+    if (view === 'stats') renderForecastChart(canvas(), { bundle, band, drag: qout ? drag : null });
+    else renderEnsembleChart(canvas(), { bundle, band });
+  };
   const recompute = () => { band = recomputeBand(anchor, qout); render(); };
 
-  wireAnchor(bundle, anchor, (v) => { anchor = v; recompute(); });
+  wireAnchor(bundle, anchor, (v) => { anchor = v; recompute(); }, () => {
+    if (qout === null) return; // rule mode: only the anchor resets
+    anchor = reconstruction.anchorLevel;
+    qout = [...recomputeBand(anchor, null).qout]; // restore the rule-default schedule
+    recompute();   // band now reflects the rule schedule
+    buildTable();  // re-prefill the table from it
+  });
 
   const segs = (sel, fn) => panel.querySelectorAll(sel).forEach((b) => {
     b.onclick = () => { panel.querySelectorAll(sel).forEach((x) => x.classList.toggle('active', x === b)); fn(b); };
   });
   segs('#view-toggle .seg', (b) => { view = b.dataset.view; render(); });
 
-  const tableWrap = panel.querySelector('.qout-table-wrap');
   let qTimer;
   const buildTable = () => {
-    tableWrap.innerHTML = `<table class="qout-table"><thead><tr>${
+    tableWrap.innerHTML = `<p class="qout-hint">Drag the mean line up or down to set a target level; the release updates to match.</p>`
+      + `<table class="qout-table"><thead><tr>${
       band.dates.map((d) => `<th>${d.slice(5)}</th>`).join('')
     }</tr></thead><tbody><tr>${
       band.qout.map((q) => `<td><input type="number" step="0.1" value="${q.toFixed(1)}"></td>`).join('')
@@ -205,7 +240,8 @@ function setupForecast(bundle, reconstruction, initialBand, recomputeBand) {
   };
   segs('#qout-toggle .seg', (b) => {
     if (b.dataset.qmode === 'rule') { qout = null; tableWrap.hidden = true; recompute(); }
-    else { buildTable(); tableWrap.hidden = false; } // prefill from the current rule schedule
+    // manual: seed the schedule from the current rule run, enable the table + drag handles
+    else { qout = [...band.qout]; buildTable(); tableWrap.hidden = false; render(); }
   });
 
   return { render, getBand: () => band };
@@ -220,7 +256,7 @@ async function showReservoir(r) {
   panel.querySelector('.panel-close').onclick = closePanel;
   try {
     const bundle = await loadBundle(r.id);
-    const { reconstruction, band, recomputeBand } = await computeReservoir(bundle);
+    const { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt } = await computeReservoir(bundle);
     panel.innerHTML = shell(r.name, `
       <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m</p>
       <div class="tabs">
@@ -256,7 +292,7 @@ async function showReservoir(r) {
       </div>`);
     panel.querySelector('.panel-close').onclick = closePanel;
 
-    const fc = setupForecast(bundle, reconstruction, band, recomputeBand);
+    const fc = setupForecast(bundle, reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt);
     const showTab = (name) => {
       panel.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
       panel.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });

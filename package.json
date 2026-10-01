@@ -15,6 +15,7 @@
   "dependencies": {
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-plugin-dragdata": "^2.3.1",
     "chartjs-plugin-zoom": "^2.2.0",
     "date-fns": "^4.4.0",
     "maplibre-gl": "^6.0.0",
