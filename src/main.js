@@ -224,19 +224,21 @@ function setupForecast(bundle, reconstruction, initialBand, recomputeBand, level
 
   let qTimer;
   const buildTable = () => {
-    tableWrap.innerHTML = `<p class="qout-hint">Drag the mean line up or down to set a target level; the release updates to match.</p>`
-      + `<table class="qout-table"><thead><tr>${
+    tableWrap.innerHTML = `<table class="qout-table"><caption>Outflow (m³/s)</caption><thead><tr>${
       band.dates.map((d) => `<th>${d.slice(5)}</th>`).join('')
     }</tr></thead><tbody><tr>${
-      band.qout.map((q) => `<td><input type="number" step="0.1" value="${q.toFixed(1)}"></td>`).join('')
+      band.qout.map((q) => `<td><input type="number" min="0" step="0.1" value="${q.toFixed(1)}"></td>`).join('')
     }</tr></tbody></table>`;
-    tableWrap.querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => {
-      clearTimeout(qTimer);
-      qTimer = setTimeout(() => {
-        qout = [...tableWrap.querySelectorAll('input')].map((i) => parseFloat(i.value) || 0);
-        recompute();
-      }, 200);
-    }));
+    tableWrap.querySelectorAll('input').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        clearTimeout(qTimer);
+        qTimer = setTimeout(() => {
+          qout = [...tableWrap.querySelectorAll('input')].map((i) => Math.max(0, parseFloat(i.value) || 0));
+          recompute();
+        }, 200);
+      });
+      inp.addEventListener('change', () => { inp.value = Math.max(0, parseFloat(inp.value) || 0).toFixed(1); });
+    });
   };
   segs('#qout-toggle .seg', (b) => {
     if (b.dataset.qmode === 'rule') { qout = null; tableWrap.hidden = true; recompute(); }

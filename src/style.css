@@ -206,7 +206,7 @@ html, body {
 .seg.active { background: rgba(56, 189, 248, 0.18); color: var(--accent); }
 
 .qout-table-wrap { overflow-x: auto; margin: 0 0 10px; }
-.qout-hint { margin: 0 0 6px; color: var(--text-dim); font-size: 0.78rem; }
+.qout-table caption { caption-side: top; text-align: left; color: var(--text-dim); font-size: 0.78rem; padding: 0 0 4px; }
 .qout-table { border-collapse: collapse; font-size: 0.75rem; }
 .qout-table th { padding: 2px 4px; color: var(--text-dim); font-weight: 600; }
 .qout-table td { padding: 1px 2px; }
