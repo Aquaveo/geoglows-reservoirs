@@ -12,6 +12,7 @@ const TEXT = '#e2e8f0';
 
 const pt = (dates, values) => dates.map((d, i) => ({ x: d, y: values[i] }));
 const ms = (isoDate) => new Date(isoDate).getTime();
+const DAY_MS = 86400000;
 const opLines = (min, max, x0, x1) => [
   { label: 'Max level', data: [{ x: x0, y: max }, { x: x1, y: max }], borderColor: '#FF0000', borderDash: [5, 4], borderWidth: 1, pointRadius: 0, dragData: false },
   { label: 'Min level', data: [{ x: x0, y: min }, { x: x1, y: min }], borderColor: '#660066', borderDash: [5, 4], borderWidth: 1, pointRadius: 0, dragData: false },
@@ -19,13 +20,13 @@ const opLines = (min, max, x0, x1) => [
 
 // xRange (optional): { view: {min,max}, limits: {min,max} } in epoch ms — sets the
 // default visible window and how far the user may zoom/pan out.
-const baseOptions = (xRange, { pan = true, unit } = {}) => {
+const baseOptions = (xRange, { pan = true, unit, panModifier } = {}) => {
   const time = { tooltipFormat: 'yyyy-MM-dd' };
   if (unit) { time.unit = unit; time.displayFormats = { [unit]: 'MMM d' }; }
   const x = { type: 'time', time, ticks: { color: AXIS, maxRotation: 0, autoSkip: true }, grid: { color: GRID } };
   const zoom = {
     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-    pan: { enabled: pan, mode: 'x' },
+    pan: { enabled: pan, mode: 'x', modifierKey: panModifier },
   };
   if (xRange) {
     x.min = xRange.view.min;
@@ -93,16 +94,18 @@ export function renderForecastChart(canvas, { bundle, band, drag, fresh }) {
     return forecastChart;
   }
   if (forecastChart) forecastChart.destroy();
-  forecastChart = new Chart(canvas, { type: 'line', data: { datasets }, options: forecastOptions(drag) });
+  const options = forecastOptions(drag);
+  options.plugins.zoom.limits = { x: { min: ms(band.dates[0]) - DAY_MS, max: ms(band.dates.at(-1)) + DAY_MS } };
+  forecastChart = new Chart(canvas, { type: 'line', data: { datasets }, options });
   forecastChart.$kind = 'stats';
   forecastChart.$drag = !!drag;
-  canvas.ondblclick = () => forecastChart.resetZoom(); // wheel-zoom only; dbl-click resets
+  canvas.ondblclick = () => forecastChart.resetZoom(); // dbl-click resets zoom/pan
   return forecastChart;
 }
 
 // Forecast chart options, with optional vertical drag on the Mean line (manual outflow).
 function forecastOptions(drag) {
-  const options = baseOptions(undefined, { pan: false, unit: 'day' });
+  const options = baseOptions(undefined, { pan: true, unit: 'day', panModifier: 'ctrl' }); // Ctrl+drag pans
   if (!drag) { options.plugins.dragData = false; return options; }
   options.interaction = { mode: 'nearest', intersect: true }; // grab the Mean handle, not an op-line
   options.plugins.dragData = {
@@ -123,6 +126,8 @@ export function renderEnsembleChart(canvas, { bundle, band }) {
     label: '_member', data: pt(band.dates, m),
     borderColor: 'rgba(148,163,184,0.35)', borderWidth: 1, pointRadius: 0,
   }));
+  const options = baseOptions(undefined, { pan: true, unit: 'day', panModifier: 'ctrl' }); // Ctrl+drag pans
+  options.plugins.zoom.limits = { x: { min: ms(band.dates[0]) - DAY_MS, max: ms(band.dates.at(-1)) + DAY_MS } };
   forecastChart = new Chart(canvas, {
     type: 'line',
     data: {
@@ -132,7 +137,7 @@ export function renderEnsembleChart(canvas, { bundle, band }) {
         { label: 'Median', data: pt(band.dates, band.median), borderColor: '#c81e1e', borderWidth: 2, pointRadius: 0 },
       ],
     },
-    options: baseOptions(undefined, { pan: false, unit: 'day' }),
+    options,
   });
   forecastChart.$kind = 'ensembles';
   canvas.ondblclick = () => forecastChart.resetZoom();
