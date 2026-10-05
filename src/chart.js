@@ -75,7 +75,7 @@ export function renderHistoryChart(canvas, { bundle, reconstruction }) {
 
 // 15-day forecast: mean/median + min–max and p25–p75 ensemble bands + operating lines.
 // drag (optional): enables dragging the Mean line vertically to back-solve outflow.
-export function renderForecastChart(canvas, { bundle, band, drag }) {
+export function renderForecastChart(canvas, { bundle, band, drag, fresh }) {
   const datasets = [
     ...opLines(bundle.min_level, bundle.max_level, band.dates[0], band.dates.at(-1)),
     { label: 'Min–max', data: pt(band.dates, band.max), borderColor: 'transparent', backgroundColor: 'rgba(173,216,230,0.4)', pointRadius: 0, fill: '+1', dragData: false },
@@ -86,7 +86,8 @@ export function renderForecastChart(canvas, { bundle, band, drag }) {
     { label: 'Median', data: pt(band.dates, band.median), borderColor: '#c81e1e', borderWidth: 2, pointRadius: 0, dragData: false },
   ];
   // Same chart kind + drag state: update in place so zoom survives a drag/anchor recompute.
-  if (forecastChart && forecastChart.$kind === 'stats' && forecastChart.$drag === !!drag) {
+  // `fresh` forces a rebuild (Reset button) to clear zoom and re-center.
+  if (!fresh && forecastChart && forecastChart.$kind === 'stats' && forecastChart.$drag === !!drag) {
     forecastChart.data.datasets = datasets;
     forecastChart.update('none');
     return forecastChart;

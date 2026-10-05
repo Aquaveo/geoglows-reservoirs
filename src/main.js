@@ -203,18 +203,17 @@ function setupForecast(bundle, reconstruction, initialBand, recomputeBand, level
     },
   };
 
-  const render = () => {
-    if (view === 'stats') renderForecastChart(canvas(), { bundle, band, drag: qout ? drag : null });
+  const render = (fresh) => {
+    if (view === 'stats') renderForecastChart(canvas(), { bundle, band, drag: qout ? drag : null, fresh });
     else renderEnsembleChart(canvas(), { bundle, band });
   };
-  const recompute = () => { band = recomputeBand(anchor, qout); render(); };
+  const recompute = (fresh) => { band = recomputeBand(anchor, qout); render(fresh); };
 
   wireAnchor(bundle, anchor, (v) => { anchor = v; recompute(); }, () => {
-    if (qout === null) return; // rule mode: only the anchor resets
     anchor = reconstruction.anchorLevel;
-    qout = [...recomputeBand(anchor, null).qout]; // restore the rule-default schedule
-    recompute();   // band now reflects the rule schedule
-    buildTable();  // re-prefill the table from it
+    if (qout !== null) qout = [...recomputeBand(anchor, null).qout]; // restore the rule-default schedule
+    recompute(true);                 // fresh render: reset zoom and re-center
+    if (qout !== null) buildTable();  // re-prefill the table from the reset band
   });
 
   const segs = (sel, fn) => panel.querySelectorAll(sel).forEach((b) => {
