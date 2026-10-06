@@ -6,6 +6,7 @@
   "description": "Generic client-side reservoir monitor built on GEOGLOWS v2.",
   "scripts": {
     "reservoirs": "node scripts/build-index.mjs",
+    "precompute": "node scripts/precompute.mjs",
     "predev": "node scripts/build-index.mjs",
     "dev": "vite",
     "prebuild": "node scripts/build-index.mjs",

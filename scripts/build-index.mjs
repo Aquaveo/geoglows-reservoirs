@@ -9,7 +9,7 @@ const REQUIRED = ['id', 'name', 'lat', 'lon', 'min_level', 'max_level',
   'river_ids', 'rule', 'bathymetry', 'observed_levels', 'observed_inflow'];
 
 const index = [];
-for (const file of readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'index.json')) {
+for (const file of readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'index.json' && !f.endsWith('.latest.json'))) {
   const b = JSON.parse(readFileSync(join(dir, file), 'utf8'));
   const missing = REQUIRED.filter((k) => b[k] === undefined);
   if (missing.length) console.warn(`  ${file}: missing ${missing.join(', ')}`);

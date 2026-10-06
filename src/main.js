@@ -109,29 +109,54 @@ function forecastRows(band) {
 const shell = (name, inner) =>
   `<button class="panel-close" aria-label="Close">×</button><h2>${esc(name)}</h2>${inner}`;
 
-// Fetch retro once, run qin -> reconstruct -> band, memoized per reservoir.
-// Evict on failure so a retry refetches rather than replaying the rejection.
+// Build the interactive result (band + re-propagation closures) from ensemble inputs.
+function assembleResult(bundle, reconstruction, dates, ensMatrix) {
+  // Re-propagate the band from any anchor + optional manual outflow (instant).
+  const recomputeBand = (anchorLevel, qoutOverride) => {
+    const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix, qoutOverride);
+    return bandStats(dates, traj, qoutSeq);
+  };
+  // Inverse (manual outflow): a day's achievable mean-level range, and the outflow
+  // that lands the mean at a dragged target.
+  const levelBoundsAt = (anchorLevel, qoutSeq, day) =>
+    levelBounds(bundle, anchorLevel, ensMatrix, qoutSeq, day);
+  const solveQoutAt = (anchorLevel, qoutSeq, day, target) =>
+    solveQout(bundle, anchorLevel, ensMatrix, qoutSeq, day, target);
+  const band = recomputeBand(reconstruction.anchorLevel);
+  return { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt };
+}
+
+// Daily precompute (scripts/precompute.mjs) if published; null -> compute live.
+async function loadPrecomputed(id) {
+  try {
+    const r = await fetch(`${BASE}reservoirs/${id}.latest.json`, { cache: 'no-cache' });
+    if (!r.ok) return null;
+    const { reconstruction, forecast } = await r.json();
+    const dates = forecast?.dates;
+    const ens = forecast?.ensMatrix;
+    // Any shape problem -> null, so computeReservoir falls through to live compute.
+    const valid = reconstruction?.dates?.length && Number.isFinite(reconstruction.anchorLevel)
+      && Array.isArray(dates) && dates.length
+      && Array.isArray(ens) && ens.length === dates.length
+      && Array.isArray(ens[0]) && ens[0].length;
+    return valid ? { reconstruction, dates, ensMatrix: ens } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Precomputed result if available; else fetch GEOGLOWS and compute in the browser.
+// Memoized per reservoir; evict on failure so a retry refetches.
 const resultCache = new Map();
 function computeReservoir(bundle) {
   if (!resultCache.has(bundle.id)) {
     const p = (async () => {
+      const pre = await loadPrecomputed(bundle.id);
+      if (pre) return assembleResult(bundle, pre.reconstruction, pre.dates, pre.ensMatrix);
       const retro = await retroDaily(bundle.river_ids);
-      const qin = await qinToToday(bundle, retro);
-      const reconstruction = reconstruct(bundle, qin);
+      const reconstruction = reconstruct(bundle, await qinToToday(bundle, retro));
       const { dates, ensMatrix } = await forecastEnsemble(bundle, retro);
-      // Re-propagate the band from any anchor + optional manual outflow (instant).
-      const recomputeBand = (anchorLevel, qoutOverride) => {
-        const { traj, qoutSeq } = propagateBand(bundle, anchorLevel, ensMatrix, qoutOverride);
-        return bandStats(dates, traj, qoutSeq);
-      };
-      // Inverse (manual outflow): a day's achievable mean-level range, and the outflow
-      // that lands the mean at a dragged target.
-      const levelBoundsAt = (anchorLevel, qoutSeq, day) =>
-        levelBounds(bundle, anchorLevel, ensMatrix, qoutSeq, day);
-      const solveQoutAt = (anchorLevel, qoutSeq, day, target) =>
-        solveQout(bundle, anchorLevel, ensMatrix, qoutSeq, day, target);
-      const band = recomputeBand(reconstruction.anchorLevel);
-      return { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt };
+      return assembleResult(bundle, reconstruction, dates, ensMatrix);
     })();
     p.catch(() => resultCache.delete(bundle.id));
     resultCache.set(bundle.id, p);

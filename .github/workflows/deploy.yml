@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '0 12 * * *'   # daily: refresh the precomputed forecasts
   workflow_dispatch:
 
 permissions:
@@ -23,6 +25,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: npm run precompute   # writes public/reservoirs/*.latest.json; app falls back to live compute if missing
+        continue-on-error: true
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

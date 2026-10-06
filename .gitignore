@@ -6,3 +6,6 @@ dist/
 
 # Generated from the bundle files by scripts/build-index.mjs (predev/prebuild).
 public/reservoirs/index.json
+
+# Generated daily by scripts/precompute.mjs (CI); not committed.
+public/reservoirs/*.latest.json
