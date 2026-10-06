@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Generic, no-backend reservoir monitor built on GEOGLOWS v2 (client-side model).",
+  "description": "Generic client-side reservoir monitor built on GEOGLOWS v2.",
   "scripts": {
     "reservoirs": "node scripts/build-index.mjs",
     "predev": "node scripts/build-index.mjs",

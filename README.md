@@ -10,6 +10,16 @@ and ships as a static site (GitHub Pages).
 It is a config-driven reimagining of the Tethys `reservoir_management` app: add a
 reservoir by dropping in a data bundle, no code change.
 
+## Features
+- **Map + sidebar** of preset reservoirs, grouped into collapsible country folders with per-folder marker show/hide.
+- **History tab** — observed levels plus a water-balance **reconstruction** from the last observation to today, with operating-band reference lines.
+- **15-day forecast tab** — bias-corrected 51-member ensemble propagated into a percentile band, with **Statistics** (min/p25/median/p75/max + mean) and **Ensembles** (all members) views.
+- **Today's-level override** — re-anchor the forecast to a measured current level (slider + input, clamped to a sensible range).
+- **Outflow planning** — switch from the operating **Rule** to a **Manual** daily schedule, or **drag the mean forecast level** to a target and have the required release back-solved (clamped to the physically achievable range).
+- **Chart interaction** — wheel zoom, Ctrl+drag pan, double-click or Reset to restore the view.
+- **CSV export** of the active tab (history series or forecast band).
+- **Drop-in reservoirs** — add one by dropping a JSON bundle in `public/reservoirs/`; the marker, sidebar entry, and index regenerate automatically (no code change).
+
 ## Stack
 - Vite + vanilla ES modules (no framework)
 - MapLibre GL JS (map)
