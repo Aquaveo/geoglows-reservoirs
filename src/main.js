@@ -131,7 +131,7 @@ async function loadPrecomputed(id) {
   try {
     const r = await fetch(`${BASE}reservoirs/${id}.latest.json`, { cache: 'no-cache' });
     if (!r.ok) return null;
-    const { reconstruction, forecast } = await r.json();
+    const { generated, reconstruction, forecast } = await r.json();
     const dates = forecast?.dates;
     const ens = forecast?.ensMatrix;
     // Any shape problem -> null, so computeReservoir falls through to live compute.
@@ -139,7 +139,7 @@ async function loadPrecomputed(id) {
       && Array.isArray(dates) && dates.length
       && Array.isArray(ens) && ens.length === dates.length
       && Array.isArray(ens[0]) && ens[0].length;
-    return valid ? { reconstruction, dates, ensMatrix: ens } : null;
+    return valid ? { generated, reconstruction, dates, ensMatrix: ens } : null;
   } catch {
     return null;
   }
@@ -152,16 +152,28 @@ function computeReservoir(bundle) {
   if (!resultCache.has(bundle.id)) {
     const p = (async () => {
       const pre = await loadPrecomputed(bundle.id);
-      if (pre) return assembleResult(bundle, pre.reconstruction, pre.dates, pre.ensMatrix);
+      if (pre) return { ...assembleResult(bundle, pre.reconstruction, pre.dates, pre.ensMatrix), generated: pre.generated };
       const retro = await retroDaily(bundle.river_ids);
       const reconstruction = reconstruct(bundle, await qinToToday(bundle, retro));
       const { dates, ensMatrix } = await forecastEnsemble(bundle, retro);
-      return assembleResult(bundle, reconstruction, dates, ensMatrix);
+      return { ...assembleResult(bundle, reconstruction, dates, ensMatrix), generated: null };
     })();
     p.catch(() => resultCache.delete(bundle.id));
     resultCache.set(bundle.id, p);
   }
   return resultCache.get(bundle.id);
+}
+
+// Warm the cache from precomputed results only (never triggers live compute), so
+// opening a reservoir is instant. Reservoirs without a precompute stay on-demand.
+async function preloadReservoir(id) {
+  if (resultCache.has(id)) return;
+  const pre = await loadPrecomputed(id);
+  if (!pre) return;
+  const bundle = await loadBundle(id);
+  resultCache.set(id, Promise.resolve({
+    ...assembleResult(bundle, pre.reconstruction, pre.dates, pre.ensMatrix), generated: pre.generated,
+  }));
 }
 
 // Today's-level control: calls onAnchor(level), debounced and clamped, when changed.
@@ -282,9 +294,9 @@ async function showReservoir(r) {
   panel.querySelector('.panel-close').onclick = closePanel;
   try {
     const bundle = await loadBundle(r.id);
-    const { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt } = await computeReservoir(bundle);
+    const { reconstruction, band, recomputeBand, levelBoundsAt, solveQoutAt, generated } = await computeReservoir(bundle);
     panel.innerHTML = shell(r.name, `
-      <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m</p>
+      <p class="muted">operating band ${bundle.min_level}–${bundle.max_level} m${generated ? ` · forecast as of ${esc(generated)}` : ''}</p>
       <div class="tabs">
         <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="forecast">15-day forecast</button>
@@ -406,6 +418,7 @@ async function buildUI() {
     list.appendChild(groupEl);
   }
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 80, maxZoom: 9 });
+  reservoirs.forEach((r) => preloadReservoir(r.id).catch(() => {})); // warm cache for instant open
 }
 
 map.on('load', buildUI);
